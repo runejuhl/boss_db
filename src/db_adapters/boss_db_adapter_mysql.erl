@@ -49,6 +49,7 @@ find(Pid, Type, Conditions, Max, Skip, Sort, SortOrder) when is_atom(Type), is_l
         true ->
             Query = build_select_query(Type, Conditions, Max, Skip, Sort, SortOrder),
             Res = fetch(Pid, Query),
+
             case Res of
                 {data, MysqlRes} ->
                     Columns = mysql:get_result_field_info(MysqlRes),
@@ -166,7 +167,43 @@ execute(Pid, Commands) ->
     fetch(Pid, Commands).
 
 transaction(Pid, TransactionFun) when is_function(TransactionFun) ->
-    mysql_conn:transaction(Pid, TransactionFun, self()).
+    do_transaction(Pid, TransactionFun).
+    
+do_transaction(Pid, TransactionFun) when is_function(TransactionFun) ->
+    case do_begin(Pid, self()) of
+ 	{error, _} = Err ->	
+ 	    {aborted, Err};
+ 	{updated,{mysql_result,[],[],0,0,[]}} ->
+	    case catch TransactionFun() of
+		error = Err ->  
+				do_rollback(Pid, self()),
+				{aborted, Err};
+		{error, _} = Err -> 
+				do_rollback(Pid, self()),
+				{aborted, Err};
+		{'EXIT', _} = Err -> 
+				do_rollback(Pid, self()),
+				{aborted, Err};
+		Res ->
+		    case do_commit(Pid, self()) of
+			{error, _} = Err ->
+			    do_rollback(Pid, self()),
+			    {aborted, Err};
+			_ ->
+			    {atomic, Res}
+		    end
+	    end
+    end.    
+
+do_begin(Pid,_)->
+	fetch(Pid, ["BEGIN"]).	
+
+do_commit(Pid,_)->
+	fetch(Pid, ["COMMIT"]).
+
+do_rollback(Pid,_)->
+	fetch(Pid, ["ROLLBACK"]).
+
 
 % internal
 
@@ -382,6 +419,8 @@ pack_datetime(DateTime) ->
 
 pack_now(Now) -> pack_datetime(calendar:now_to_datetime(Now)).
 
+pack_value(null) ->
+	"null";
 pack_value(undefined) ->
 	"null";
 pack_value(V) when is_binary(V) ->
@@ -390,6 +429,8 @@ pack_value(V) when is_list(V) ->
     "'" ++ escape_sql(V) ++ "'";
 pack_value({MegaSec, Sec, MicroSec}) when is_integer(MegaSec) andalso is_integer(Sec) andalso is_integer(MicroSec) ->
     pack_now({MegaSec, Sec, MicroSec});
+pack_value({date, Date = {_,_,_}}) ->    
+    pack_datetime({Date,{0,0,0}});    
 pack_value({{_, _, _}, {_, _, _}} = Val) ->
     pack_datetime(Val);
 pack_value(Val) when is_integer(Val) ->

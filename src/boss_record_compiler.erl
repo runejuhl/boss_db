@@ -36,6 +36,9 @@ process_tokens([{']',_},{')',_},{dot,_}|_]=Tokens, TokenAcc, Acc) ->
 process_tokens([{'-',N}=T1,{atom,N,module}=T2,{'(',_}=T3,{atom,_,_ModuleName}=T4,{',',_}=T5,
         {'[',_}=T6,{var,_,'Id'}=T7|Rest], TokenAcc, []) ->
     process_tokens(Rest, lists:reverse([T1, T2, T3, T4, T5, T6, T7], TokenAcc), []);
+process_tokens([{'-',_N}=T1,{atom,_,module}=T2,{'(',_}=T3,{atom,_,_ModuleName}=T4,{',',_}=T5,
+                {'[',_}=T6,{var,_,'Id'}=T7,{'::',_},{atom,_,VarType},{'(',_},{')',_}|Rest], TokenAcc, []) ->    
+    process_tokens(Rest, lists:reverse([T1, T2, T3, T4, T5, T6, T7], TokenAcc), [{'Id', VarType}]);
 process_tokens([{',',_}=T1,{var,_,VarName}=T2,{'::',_},{atom,_,VarType},{'(',_},{')',_}|Rest], TokenAcc, Acc) ->
     process_tokens(Rest, lists:reverse([T1, T2], TokenAcc), [{VarName, VarType}|Acc]);
 process_tokens([H|T], TokenAcc, Acc) ->
@@ -228,15 +231,15 @@ set_attributes_forms(ModuleName, Parameters) ->
                                                     erl_syntax:variable(P)])
                                     end, Parameters))])])),
     erl_syntax:add_precomments([erl_syntax:comment(
-                    ["% @spec set(Attribute::atom(), NewValue) -> "++inflector:camelize(atom_to_list(ModuleName)),
+                ["% @spec set(Attribute::atom(), NewValue::any()) -> "++inflector:camelize(atom_to_list(ModuleName)),
                         "% @doc Set the value of a particular attribute. Does not save the record."])],
             erl_syntax:function(
                 erl_syntax:atom(set),
-                [erl_syntax:clause([erl_syntax:variable("Attribute"), erl_syntax:variable("NewValue")], none,
+                [erl_syntax:clause([erl_syntax:variable(?PREFIX++"Attribute"), erl_syntax:variable(?PREFIX++"NewValue")], none,
                         [
                             erl_syntax:application(
                                 erl_syntax:atom(set),
-                                [erl_syntax:list([erl_syntax:tuple([erl_syntax:variable("Attribute"), erl_syntax:variable("NewValue")])])])
+                                [erl_syntax:list([erl_syntax:tuple([erl_syntax:variable(?PREFIX++"Attribute"), erl_syntax:variable(?PREFIX++"NewValue")])])])
                         ])]))
     ].
 

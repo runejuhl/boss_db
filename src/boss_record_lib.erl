@@ -6,10 +6,12 @@
         dummy_record/1,
         attribute_names/1,
         attribute_types/1,
+        keytype/1,
         convert_value_to_type/2,
         ensure_loaded/1]).
 
 -define(MILLION, 1000000).
+-define(DEFAULT_KEYTYPE, serial).
 
 run_before_hooks(Record, true) ->
     run_hooks(Record, element(1, Record), before_create);
@@ -42,7 +44,7 @@ is_boss_record(_, _) ->
 
 dummy_record(Module) ->
     NumArgs = proplists:get_value('new', Module:module_info(exports)),
-    apply(Module, 'new', lists:map(fun(1) -> 'id'; (_) -> undefined end, lists:seq(1, NumArgs))).
+    apply(Module, 'new', ['id'] ++ lists:duplicate(NumArgs-1, undefined)).
 
 attribute_names(Module) ->
     DummyRecord = dummy_record(Module),
@@ -51,6 +53,13 @@ attribute_names(Module) ->
 attribute_types(Module) ->
     DummyRecord = dummy_record(Module),
     DummyRecord:attribute_types().
+
+keytype(Module) when is_atom(Module) ->
+    proplists:get_value(id, attribute_types(Module), ?DEFAULT_KEYTYPE);
+keytype(Module) when is_list(Module) ->
+    proplists:get_value(id, attribute_types(list_to_atom(Module)), ?DEFAULT_KEYTYPE);
+keytype(Record) when is_tuple(Record) andalso is_atom(element(1, Record)) ->
+    proplists:get_value(id, Record:attribute_types(), ?DEFAULT_KEYTYPE).
 
 ensure_loaded(Module) ->
     case code:ensure_loaded(Module) of
@@ -104,4 +113,6 @@ convert_value_to_type("false", boolean) -> false;
 convert_value_to_type(1, boolean) -> true;
 convert_value_to_type(0, boolean) -> false;
 convert_value_to_type(true, boolean) -> true;
-convert_value_to_type(false, boolean) -> false.
+convert_value_to_type(false, boolean) -> false;
+
+convert_value_to_type(Val, float) -> Val.

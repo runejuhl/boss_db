@@ -126,18 +126,22 @@ test_rec(Rec,{Key, 'gt', Value}) ->
 test_rec(Rec,{Key, 'lt', Value}) ->
     apply(Rec,Key,[]) < Value;
 test_rec(Rec,{Key, 'ge', Value}) ->
-    apply(Rec,Key,[]) =< Value;
-test_rec(Rec,{Key, 'le', Value}) ->
     apply(Rec,Key,[]) >= Value;
+test_rec(Rec,{Key, 'le', Value}) ->
+    apply(Rec,Key,[]) =< Value;
+test_rec(Rec,{Key, 'matches', "*"++Value}) ->
+    {ok, MP} = re:compile(Value, [caseless]),
+    case re:run(apply(Rec,Key,[]), MP) of
+        {match,_} -> true;
+        match -> true;
+        _ -> false
+    end;
 test_rec(Rec,{Key, 'matches', Value}) ->
     {ok, MP} = re:compile(Value),
     case re:run(apply(Rec,Key,[]), MP) of
-        {match,_} ->
-            true;
-        match ->
-            true;
-        _ ->
-            false
+        {match,_} -> true;
+        match -> true;
+        _ -> false
     end;
 test_rec(Rec,{Key, 'not_matches', Value}) ->
     not test_rec(Rec,{Key, 'matches', Value});

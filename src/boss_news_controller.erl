@@ -54,7 +54,7 @@ handle_call({set_watch, WatchId, TopicString, CallBack, UserInfo, TTL}, From, St
             (SingleTopic, {ok, StateAcc, WatchListAcc}) ->
                 case re:split(SingleTopic, "\\.", [{return, list}]) of
                     [Id, Attr] ->
-                        [Module, IdNum] = re:split(Id, "-", [{return, list}]),
+                        [Module, IdNum] = re:split(Id, "-", [{return, list}, {parts, 2}]),
                         {NewState1, WatchInfo} = case IdNum of
                             "*" ->
                                 SetAttrWatchers = case dict:find(Module, StateAcc#state.set_attr_watchers) of
@@ -75,7 +75,7 @@ handle_call({set_watch, WatchId, TopicString, CallBack, UserInfo, TTL}, From, St
                         end,
                         {ok, NewState1, [WatchInfo|WatchListAcc]};
                     _ -> 
-                        case re:split(SingleTopic, "-", [{return, list}]) of
+                        case re:split(SingleTopic, "-", [{return, list}, {parts, 2}]) of
                             [_Module, _IdNum] ->
                                 IdWatchers = case dict:find(SingleTopic, State#state.id_watchers) of
                                     {ok, Val} -> Val;
@@ -96,7 +96,7 @@ handle_call({set_watch, WatchId, TopicString, CallBack, UserInfo, TTL}, From, St
                 end;
             (_, Error) ->
                 Error
-        end, {ok, State, []}, re:split(TopicString, ", +", [{return, list}])),
+        end, {ok, State, []}, re:split(TopicString, ", +", [{return, list}, {parts, 2}])),
     case RetVal of
         ok -> {reply, RetVal, NewState#state{ 
                     watch_dict = dict:store(WatchId, 
@@ -106,14 +106,14 @@ handle_call({set_watch, WatchId, TopicString, CallBack, UserInfo, TTL}, From, St
                             user_info = UserInfo, 
                             exp_time = ExpTime, 
                             ttl = TTL}, NewState#state.watch_dict),
-                    ttl_tree = boss_pq:insert_value(ExpTime, WatchId, NewState#state.ttl_tree)
+                    ttl_tree = tiny_pq:insert_value(ExpTime, WatchId, NewState#state.ttl_tree)
                 }};
         Error -> {reply, Error, State}
     end;
 handle_call({cancel_watch, WatchId}, _From, State) ->
     {RetVal, NewState} = case dict:find(WatchId, State#state.watch_dict) of
         {ok, #watch{ exp_time = ExpTime }} ->
-            NewTree = boss_pq:move_value(ExpTime, 0, WatchId, State#state.ttl_tree),
+            NewTree = tiny_pq:move_value(ExpTime, 0, WatchId, State#state.ttl_tree),
             {ok, State#state{ ttl_tree = NewTree }};
         _ ->
             {{error, not_found}, State}
@@ -124,7 +124,7 @@ handle_call({extend_watch, WatchId}, _From, State0) ->
     {RetVal, NewState} = case dict:find(WatchId, State#state.watch_dict) of
         {ok, #watch{ exp_time = ExpTime, ttl = TTL } = Watch} ->
             NewExpTime = future_time(TTL),
-            NewTree = boss_pq:move_value(ExpTime, NewExpTime, WatchId, State#state.ttl_tree),
+            NewTree = tiny_pq:move_value(ExpTime, NewExpTime, WatchId, State#state.ttl_tree),
             {ok, State#state{ ttl_tree = NewTree, 
                     watch_dict = dict:store(WatchId, Watch#watch{ exp_time = NewExpTime }, State#state.watch_dict) }};
         _ ->
@@ -133,7 +133,7 @@ handle_call({extend_watch, WatchId}, _From, State0) ->
     {reply, RetVal, NewState};
 handle_call({created, Id, Attrs}, _From, State0) ->
     State = prune_expired_entries(State0),
-    [Module | _IdNum] = re:split(Id, "-", [{return, list}]),
+    [Module | _IdNum] = re:split(Id, "-", [{return, list}, {parts, 2}]),
     PluralModel = inflector:pluralize(Module),
     {RetVal, State1} = case dict:find(PluralModel, State#state.set_watchers) of
         {ok, SetWatchers} -> 
@@ -156,7 +156,7 @@ handle_call({created, Id, Attrs}, _From, State0) ->
     {reply, RetVal, State1};
 handle_call({deleted, Id, OldAttrs}, _From, State0) ->
     State = prune_expired_entries(State0),
-    [Module | _IdNum] = re:split(Id, "-", [{return, list}]),
+    [Module | _IdNum] = re:split(Id, "-", [{return, list}, {parts, 2}]),
     PluralModel = inflector:pluralize(Module),
     {RetVal, State1} = case dict:find(PluralModel, State#state.set_watchers) of
         {ok, SetWatchers} -> 
@@ -182,7 +182,7 @@ handle_call({deleted, Id, OldAttrs}, _From, State0) ->
     {reply, RetVal, State1};
 handle_call({updated, Id, OldAttrs, NewAttrs}, _From, State0) ->
     State = prune_expired_entries(State0),
-    [Module | _IdNum] = re:split(Id, "-", [{return, list}]),
+    [Module | _IdNum] = re:split(Id, "-", [{return, list}, {parts, 2}]),
     IdWatchers = case dict:find(Id, State#state.id_attr_watchers) of
         {ok, Val} -> Val;
         _ -> []
@@ -242,7 +242,7 @@ future_time(TTL) ->
     MegaSecs * 1000 * 1000 + Secs + TTL.
 
 activate_record(Id, Attrs) ->
-    [Module | _IdNum] = re:split(Id, "-", [{return, list}]),
+    [Module | _IdNum] = re:split(Id, "-", [{return, list}, {parts, 2}]),
     Type = list_to_atom(Module),
     DummyRecord = boss_record_lib:dummy_record(Type),
     apply(Type, new, lists:map(fun
@@ -252,7 +252,7 @@ activate_record(Id, Attrs) ->
 
 prune_expired_entries(#state{ ttl_tree = Tree } = State) ->
     Now = future_time(0),
-    {NewState, NewTree} = boss_pq:prune(fun(WatchId, StateAcc) ->
+    {NewState, NewTree} = tiny_pq:prune_collect_old(fun(WatchId, StateAcc) ->
                 #watch{ watch_list = WatchList } = dict:fetch(WatchId, StateAcc#state.watch_dict),
                 NewState = lists:foldr(fun
                         ({id, TopicString}, Acc) ->

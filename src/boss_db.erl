@@ -189,13 +189,15 @@ execute(Commands) ->
 execute(Commands, Params) ->
     db_call({execute, Commands, Params}).
 
-%% @spec execute( Commands::iolist() ) -> RetVal
-%% @doc Execute raw database commands on SQL databases
+%% @spec execute( Type::atom(),  Commands::iolist() ) -> [ BossRecord ] | {error, Reason}
+%% @doc Execute and activate raw database commands on SQL databases according
+%% to type
 executeact(Type, Commands) ->
     db_call({executeact, Type, Commands}).
 
-%% @spec execute( Commands::iolist(), Params::list() ) -> RetVal
-%% @doc Execute database commands with interpolated parameters on SQL databases
+%% @spec execute( Type::atom(),  Commands::iolist() ) -> [ BossRecord ] | {error, Reason}
+%% @doc Execute and activate raw database commands on SQL databases according
+%% to type
 executeact(Type, Commands, Params) ->
     db_call({executeact, Type, Commands, Params}).
 

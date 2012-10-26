@@ -140,9 +140,14 @@ executeact(Conn, Type, Commands) ->
         {ok, _Columns, []} ->
             undefined;
         {ok, Columns, ResultRows} ->
-            lists:map(fun(Row) ->
-                              activate_record(Row, Columns, Type)
-                      end, ResultRows)
+            case boss_record_lib:ensure_loaded(Type) of
+                true ->
+                    lists:map(fun(Row) ->
+                                      activate_record(Row, Columns, Type)
+                              end, ResultRows);
+                false ->
+                    {error, {module_not_loaded, Type}}
+            end
     end.
 
 executeact(Conn, Type, Commands, Params) ->
@@ -151,9 +156,14 @@ executeact(Conn, Type, Commands, Params) ->
         {ok, _Columns, []} ->
             undefined;
         {ok, Columns, ResultRows} ->
-            lists:map(fun(Row) ->
-                              activate_record(Row, Columns, Type)
-                      end, ResultRows)
+            case boss_record_lib:ensure_loaded(Type) of
+                true ->
+                    lists:map(fun(Row) ->
+                                      activate_record(Row, Columns, Type)
+                              end, ResultRows);
+                false ->
+                    {error, {module_not_loaded, Type}}
+            end
     end.
 
 transaction(Conn, TransactionFun) ->
@@ -175,7 +185,14 @@ type_to_table_name(Type) when is_list(Type) ->
 
 integer_to_id(Val, KeyString) ->
     ModelName = string:substr(KeyString, 1, string:len(KeyString) - string:len("_id")),
-    ModelName ++ "-" ++ integer_to_list(Val).
+    Id = case Val of
+             Val when is_binary(Val) ->
+                 binary_to_list(Val);
+             Val when is_integer(Val) ->
+                 integer_to_list(Val);
+             _ -> Val
+         end,
+    ModelName ++ "-" ++ Id.
 
 activate_record(Record, Metadata, Type) ->
     AttributeTypes = boss_record_lib:attribute_types(Type),
@@ -183,12 +200,14 @@ activate_record(Record, Metadata, Type) ->
                 (id) ->
                     Index = keyindex(<<"id">>, 2, Metadata),
                     Index2 = element(Index, Record),
-                    Key = case Index2 of 
-                              Index2 when is_binary(Index2) ->
-                                  binary_to_list(Index2);
-                              _ -> Index2
+                    Id = case Index2 of 
+                             Index2 when is_binary(Index2) ->
+                                 binary_to_list(Index2);
+                             Index2 when is_integer(Index2) ->
+                                 integer_to_list(Index2);
+                             _ -> Index2
                           end,
-                    atom_to_list(Type) ++ "-" ++ Key;
+                    atom_to_list(Type) ++ "-" ++ Id;
                 (Key) ->
                     KeyString = atom_to_list(Key), 
                     Index = keyindex(list_to_binary(KeyString), 2, Metadata),

@@ -2,7 +2,7 @@
 -behaviour(boss_db_adapter).
 -export([init/1, terminate/1, start/1, stop/0, find/2, find/7]).
 -export([count/3, counter/2, incr/3, delete/2, save_record/2]).
--export([push/2, pop/2, dump/1, execute/2, execute/3, transaction/2]).
+-export([push/2, pop/2, dump/1, execute/2, execute/3, executeact/3, executeact/4, transaction/2]).
 
 start(_) ->
     ok.
@@ -134,6 +134,28 @@ execute(Conn, Commands) ->
 execute(Conn, Commands, Params) ->
     pgsql:equery(Conn, Commands, Params).
 
+executeact(Conn, Type, Commands) ->
+    Res = pgsql:squery(Conn, Commands),
+    case Res of
+        {ok, _Columns, []} ->
+            undefined;
+        {ok, Columns, ResultRows} ->
+            lists:map(fun(Row) ->
+                              activate_record(Row, Columns, Type)
+                      end, ResultRows)
+    end.
+
+executeact(Conn, Type, Commands, Params) ->
+    Res = pgsql:equery(Conn, Commands, Params),
+    case Res of
+        {ok, _Columns, []} ->
+            undefined;
+        {ok, Columns, ResultRows} ->
+            lists:map(fun(Row) ->
+                              activate_record(Row, Columns, Type)
+                      end, ResultRows)
+    end.
+
 transaction(Conn, TransactionFun) ->
     case pgsql:with_transaction(Conn, fun(_C) -> TransactionFun() end) of
         {rollback, Reason} -> {aborted, Reason};
@@ -160,9 +182,15 @@ activate_record(Record, Metadata, Type) ->
     apply(Type, new, lists:map(fun
                 (id) ->
                     Index = keyindex(<<"id">>, 2, Metadata),
-                    atom_to_list(Type) ++ "-" ++ integer_to_list(element(Index, Record));
+                    Index2 = element(Index, Record),
+                    Key = case Index2 of 
+                              Index2 when is_binary(Index2) ->
+                                  binary_to_list(Index2);
+                              _ -> Index2
+                          end,
+                    atom_to_list(Type) ++ "-" ++ Key;
                 (Key) ->
-                    KeyString = atom_to_list(Key),
+                    KeyString = atom_to_list(Key), 
                     Index = keyindex(list_to_binary(KeyString), 2, Metadata),
                     AttrType = proplists:get_value(Key, AttributeTypes),
                     case element(Index, Record) of

@@ -25,6 +25,8 @@
         dump/0,
         execute/1,
         execute/2,
+        executeact/2,
+        executeact/3,
         transaction/1,
         validate_record/1,
         validate_record_types/1,
@@ -186,6 +188,16 @@ execute(Commands) ->
 %% @doc Execute database commands with interpolated parameters on SQL databases
 execute(Commands, Params) ->
     db_call({execute, Commands, Params}).
+
+%% @spec execute( Commands::iolist() ) -> RetVal
+%% @doc Execute raw database commands on SQL databases
+executeact(Type, Commands) ->
+    db_call({executeact, Type, Commands}).
+
+%% @spec execute( Commands::iolist(), Params::list() ) -> RetVal
+%% @doc Execute database commands with interpolated parameters on SQL databases
+executeact(Type, Commands, Params) ->
+    db_call({executeact, Type, Commands, Params}).
 
 %% @spec transaction( TransactionFun::function() ) -> {atomic, Result} | {aborted, Reason}
 %% @doc Execute a fun inside a transaction.

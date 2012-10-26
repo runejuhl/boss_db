@@ -140,6 +140,16 @@ handle_call({execute, Commands, Params}, _From, State) ->
     Conn = State#state.connection,
     {reply, Adapter:execute(Conn, Commands, Params), State};
 
+handle_call({executeact, Commands}, _From, State) ->
+    Adapter = State#state.adapter,
+    Conn = State#state.connection,
+    {reply, Adapter:executeact(Conn, Commands), State};
+
+handle_call({executeact, Commands, Params}, _From, State) ->
+    Adapter = State#state.adapter,
+    Conn = State#state.connection,
+    {reply, Adapter:executeact(Conn, Commands, Params), State};
+
 handle_call({transaction, TransactionFun}, _From, State) ->
     Adapter = State#state.adapter,
     Conn = State#state.connection,
